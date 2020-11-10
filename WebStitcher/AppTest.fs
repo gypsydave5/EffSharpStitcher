@@ -15,7 +15,7 @@ let spyOn f =
          spy.Record(a1, a2)
          f a1 a2))
 
-let get (path: string) =
+let newGetRequest (path: string) =
     let (path, query) =
         match (path.Split "?") with
         | [| path; query |] -> (path, query)
@@ -31,6 +31,16 @@ let get (path: string) =
     { Suave.Http.HttpContext.empty with
           request = request }
 
+let callRouteSync route request =
+    route request
+    |> Async.RunSynchronously
+    |> Option.get
+
+let getBodyString (ctx: Suave.Http.HttpContext) =
+    match ctx.response.content with
+    | Suave.Http.Bytes bytes -> System.Text.Encoding.ASCII.GetString bytes
+    | x -> failwith (sprintf "Expected bytes but got %s" (x.ToString()))
+
 [<Fact>]
 let ``1 add 1 = 2`` () = 1 + 1 |> should equal 2
 
@@ -38,17 +48,11 @@ let ``1 add 1 = 2`` () = 1 + 1 |> should equal 2
 let ``routing for valid URL`` () =
     let (spy, stitcher) = spyOn (+)
     let testApp = WebStitcher.app stitcher
-    let request = get "/stitcher?url=bob&url=joe"
-
-    let response =
-        testApp request
-        |> Async.RunSynchronously
-        |> Option.get
 
     let body =
-        match response.response.content with
-        | Suave.Http.Bytes bytes -> System.Text.Encoding.ASCII.GetString bytes
-        | _ -> ""
+        newGetRequest "/stitcher?url=bob&url=joe"
+        |> callRouteSync testApp
+        |> getBodyString
 
     body |> should equal "joebob"
     spy.Calls.Head |> should equal ("joe", "bob")
